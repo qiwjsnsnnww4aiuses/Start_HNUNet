@@ -1,0 +1,43 @@
+root@jupyter-83qlyuwrswkp2dfb:~/Net/p4# nvcc -O2 -o exp5_p2p exp5_p2p.cu
+root@jupyter-83qlyuwrswkp2dfb:~/Net/p4# ./exp5_p2p 
+cudaDeviceAccessPeer(0+1) = 1 (1 = 有P2P通路)
+卡 1 显存里的值 - 42 (应为42，且全程没有经过卡0的显存)
+
+
+
+
+root@jupyter-83qlyuwrswkp2dfb:~/Net/p4# nvidia-smi nvlink -gt d
+GPU 0: NVIDIA A800-SXM4-80GB (UUID: GPU-23b77cfa-221f-d6d6-3720-c589ed63db55)
+         Link 0: Data Tx: 7404215007 KiB
+         Link 0: Data Rx: 7394903825 KiB
+         Link 1: Data Tx: 7404485786 KiB
+         Link 1: Data Rx: 7395390241 KiB
+         Link 2: Data Tx: 7404502053 KiB
+         Link 2: Data Rx: 7395491055 KiB
+         Link 3: Data Tx: 7405316029 KiB
+         Link 3: Data Rx: 7396438614 KiB
+         Link 4: Data Tx: 7405111744 KiB
+         Link 4: Data Rx: 7395573972 KiB
+         Link 5: Data Tx: 7405192561 KiB
+         Link 5: Data Rx: 7395583573 KiB
+         Link 6: Data Tx: 7405680693 KiB
+         Link 6: Data Rx: 7395910026 KiB
+         Link 7: Data Tx: 7405561271 KiB
+         Link 7: Data Rx: 7395694171 KiB
+GPU 1: NVIDIA A800-SXM4-80GB (UUID: GPU-0ce309fb-0fbd-c4a0-f725-150d3a662706)
+         Link 0: Data Tx: 57207709467 KiB
+         Link 0: Data Rx: 57183534061 KiB
+         Link 1: Data Tx: 57209696383 KiB
+         Link 1: Data Rx: 57185346421 KiB
+         Link 2: Data Tx: 57210853820 KiB
+         Link 2: Data Rx: 57185109980 KiB
+         Link 3: Data Tx: 57217096221 KiB
+         Link 3: Data Rx: 57191349212 KiB
+         Link 4: Data Tx: 57215047925 KiB
+         Link 4: Data Rx: 57189396432 KiB
+         Link 5: Data Tx: 57215182783 KiB
+         Link 5: Data Rx: 57191214658 KiB
+         Link 6: Data Tx: 57217108417 KiB
+         Link 6: Data Rx: 57193902933 KiB
+         Link 7: Data Tx: 57212362681 KiB
+         Link 7: Data Rx: 57193155423 KiB

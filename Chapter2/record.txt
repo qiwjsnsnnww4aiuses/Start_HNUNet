@@ -1,0 +1,135 @@
+(base) root@22ad1cb9ab83:/Net/p2# nvidia-smi
+Wed Nov 1 16:42:59 2026
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 615.71.09              KMD Version: 615.71.09     CUDA UMD Version: 13.4     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA A100-SXM4-80GB          On  |   00000000:92:00.0 Off |                    0 |
+| N/A   35C    P0             65W /  400W |       0MiB /  81920MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+|   1  NVIDIA A100-SXM4-80GB          On  |   00000000:98:00.0 Off |                    0 |
+| N/A   32C    P0             67W /  400W |       0MiB /  81920MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+(base) root@22ad1cb9ab83:/Net/p2# nvidia-smi topo -m
+        GPU0    GPU1    CPU Affinity    NUMA Affinity   GPU NUMA ID
+GPU0     X      NV12    28-41   1               N/A
+GPU1    NV12     X      28-41   1               N/A
+
+Legend:
+
+  X    = Self
+  SYS  = Connection traversing PCIe as well as the SMP interconnect between NUMA nodes (e.g., QPI/UPI)
+  NODE = Connection traversing PCIe as well as the interconnect between PCIe Host Bridges within a NUMA node
+  PHB  = Connection traversing PCIe as well as a PCIe Host Bridge (typically the CPU)
+  PXB  = Connection traversing multiple PCIe bridges (without traversing the PCIe Host Bridge)
+  PIX  = Connection traversing at most a single PCIe bridge
+  NV#  = Connection traversing a bonded set of # NVLinks
+(base) root@22ad1cb9ab83:/Net/p2# python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+2.8.0+cu128 True
+(base) root@22ad1cb9ab83:/Net/p2# python -c "import torch.distributed as dist; print(dist.is_nccl_available())"
+True
+
+
+
+(base) root@22ad1cb9ab83:/Net/p2# torchrun --nproc_per_node=2 exp0_hello.py
+W1125 16:48:03.632000 213 site-packages/torch/distributed/run.py:774]
+W1125 16:48:03.632000 213 site-packages/torch/distributed/run.py:774] *****************************************
+W1125 16:48:03.632000 213 site-packages/torch/distributed/run.py:774] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed.
+W1125 16:48:03.632000 213 site-packages/torch/distributed/run.py:774] *****************************************
+rank 1/2: NVIDIA A100-SXM4-80GB @ cuda:1
+rank 0/2: NVIDIA A100-SXM4-80GB @ cuda:0
+ran 1: all_reduce result = 3.0(expected 3.0)[OK]
+ran 0: all_reduce result = 3.0(expected 3.0)[OK]
+
+(base) root@22ad1cb9ab83:/Net/p2# torchrun --nproc_per_node=2 exp0_hello.py
+W1125 16:54:09.972000 291 site-packages/torch/distributed/run.py:774]
+W1125 16:54:09.972000 291 site-packages/torch/distributed/run.py:774] *****************************************
+W1125 16:54:09.972000 291 site-packages/torch/distributed/run.py:774] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed.
+W1125 16:54:09.972000 291 site-packages/torch/distributed/run.py:774] *****************************************
+1 2 127.0.0.1 29500
+rank 1/2: NVIDIA A100-SXM4-80GB @ cuda:1
+0 2 127.0.0.1 29500
+rank 0/2: NVIDIA A100-SXM4-80GB @ cuda:0
+ran 0: all_reduce result = 3.0(expected 3.0)[OK]
+ran 1: all_reduce result = 3.0(expected 3.0)[OK]
+
+
+
+(base) root@22ad1cb9ab83:/Net/p2# torchrun --nproc_per_node=2 exp2_primitives.py
+W1125 17:00:45.402000 433 site-packages/torch/distributed/run.py:774]
+W1125 17:00:45.402000 433 site-packages/torch/distributed/run.py:774] *****************************************
+W1125 17:00:45.402000 433 site-packages/torch/distributed/run.py:774] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed.
+W1125 17:00:45.402000 433 site-packages/torch/distributed/run.py:774] *****************************************
+初始              r0=1 r1=2
+broadcast       r0=99 r1=99
+all_reduce      r0=3 r1=3
+reduce    只有r0拿到3, 其他rank手里的值不作数
+all_gather 每个人手里都是完整列表 [1, 2]
+reduce_scatter  r0=3 r1=30
+senf/recv   r1收到r0寄来的77
+
+
+(base) root@22ad1cb9ab83:/Net/p2# NCCL_DEBUG=INFO torchrun --nproc_per_node=2 exp0_hello.py  2>&1 | grep -E "via" | head -5
+22ad1cb9ab83:501:523 [0] NCCL INFO Channel 00/0 : 0[0] -> 1[1] via P2P/CUMEM/read
+22ad1cb9ab83:502:522 [1] NCCL INFO Channel 00/0 : 1[1] -> 0[0] via P2P/CUMEM/read
+22ad1cb9ab83:501:523 [0] NCCL INFO Channel 01/0 : 0[0] -> 1[1] via P2P/CUMEM/read
+22ad1cb9ab83:502:522 [1] NCCL INFO Channel 01/0 : 1[1] -> 0[0] via P2P/CUMEM/read
+22ad1cb9ab83:501:523 [0] NCCL INFO Channel 02/0 : 0[0] -> 1[1] via P2P/CUMEM/read
+
+
+
+
+
+
+
+
+==================== Exercise ====================
+(base) root@22ad1cb9ab83:/Net/p2# torchrun --nproc_per_node=2 ex2_2.py
+W1125 17:08:39.905000 617 site-packages/torch/distributed/run.py:774]
+W1125 17:08:39.905000 617 site-packages/torch/distributed/run.py:774] *****************************************
+W1125 17:08:39.905000 617 site-packages/torch/distributed/run.py:774] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed.
+W1125 17:08:39.905000 617 site-packages/torch/distributed/run.py:774] *****************************************
+Verified! Content:tensor([ 0.2927,  0.4153, -0.4950,  1.5012, -0.3981,  0.1084, -0.6948, -0.4111,
+        -1.2310,  0.4606], device='cuda:0')
+[rank0]:[W1125 17:08:42.414939751 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+
+
+
+(base) root@22ad1cb9ab83:/Net/p2# torchrun --nproc_per_node=2 ex4.py
+W1125 17:20:05.814000 851 site-packages/torch/distributed/run.py:774]
+W1125 17:20:05.814000 851 site-packages/torch/distributed/run.py:774] *****************************************
+W1125 17:20:05.814000 851 site-packages/torch/distributed/run.py:774] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed.
+W1125 17:20:05.814000 851 site-packages/torch/distributed/run.py:774] *****************************************
+/root/miniconda3/lib/python3.13/site-packages/torch/distributed/distributed_c10d.py:4807: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user.
+  warnings.warn(  # warn only once
+/root/miniconda3/lib/python3.13/site-packages/torch/distributed/distributed_c10d.py:4807: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user.
+  warnings.warn(  # warn only once
+Data all Received!
+Send/Recv Finished!
+Send/Recv Finished!
+All_Reduce Finished!
+All_Reduce Finished!
+Verified!: Rank0
+
+Send/Recv  time:0.3958ms
+
+All_Reduce time:0.1309ms
+
+Verified!: Rank1
+
+[rank0]:[W1125 17:20:08.646683093 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+归约（加法）和数据传输融合在同一个 CUDA kernel  fusion
+不是在 CPU 侧 Python 里 sum (G)，是在 GPU 传输的同时硬件归约

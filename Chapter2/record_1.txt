@@ -1,0 +1,101 @@
+===exp0_hello.py===
+root@jupyter-b9iy8xzcm6pcanmv:~/p2# torchrun --nproc_per_node=2 exp0_hello.py
+W1111 13:57:10.262000 2875 site-packages/torch/distributed/run.py:862] 
+W1111 13:57:10.262000 2875 site-packages/torch/distributed/run.py:862] *****************************************
+W1111 13:57:10.262000 2875 site-packages/torch/distributed/run.py:862] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W1111 13:57:10.262000 2875 site-packages/torch/distributed/run.py:862] *****************************************
+rank 1/2: NVIDIA A100-SXM4-40GB @ cuda:1rank 0/2: NVIDIA A100-SXM4-40GB @ cuda:0
+
+ran 0: all_reduce result = 3.0(expected 3.0)[OK]
+ran 1: all_reduce result = 3.0(expected 3.0)[OK]
+
+===exp2_primitives.py===
+root@jupyter-b9iy8xzcm6pcanmv:~/p2# torchrun --nproc_per_node=2 exp2_primitives.py
+W1111 14:13:30.321000 6228 site-packages/torch/distributed/run.py:862] 
+W1111 14:13:30.321000 6228 site-packages/torch/distributed/run.py:862] *****************************************
+W1111 14:13:30.321000 6228 site-packages/torch/distributed/run.py:862] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W1111 14:13:30.321000 6228 site-packages/torch/distributed/run.py:862] *****************************************
+初始              r0=1 r1=2
+broadcast       r0=99 r1=99
+all_reduce      r0=3 r1=3
+reduce    只有r0拿到3, 其他rank手里的值不作数
+all_gather 每个人手里都是完整列表 [1, 2]
+[rank1]:[W1111 14:13:59.056266707 ProcessGroupNCCL.cpp:4215] Warning: An unbatched P2P op (send/recv) was called on this ProcessGroup with size 2.  In lazy initialization mode, this will result in a new 2-rank NCCL communicator to be created. (function operator())
+reduce_scatter  r0=3 r1=30
+[rank0]:[W1111 14:13:59.056486333 ProcessGroupNCCL.cpp:4215] Warning: An unbatched P2P op (send/recv) was called on this ProcessGroup with size 2.  In lazy initialization mode, this will result in a new 2-rank NCCL communicator to be created. (function operator())
+senf/recv   r1收到r0寄来的77
+
+===ex2.py===
+root@jupyter-b9iy8xzcm6pcanmv:~/p2# torchrun --nproc_per_node=2 ex2.py
+W1111 14:32:14.966000 8403 site-packages/torch/distributed/run.py:862] 
+W1111 14:32:14.966000 8403 site-packages/torch/distributed/run.py:862] *****************************************
+W1111 14:32:14.966000 8403 site-packages/torch/distributed/run.py:862] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W1111 14:32:14.966000 8403 site-packages/torch/distributed/run.py:862] *****************************************
+Rank 1 received:tensor([-0.0941, -0.3482, -0.5769,  0.9542,  0.2930, -0.1652,  0.1903,  0.1057,
+        -1.6162, -0.8200], device='cuda:1')
+Verified! Content:tensor([-0.0941, -0.3482, -0.5769,  0.9542,  0.2930, -0.1652,  0.1903,  0.1057,
+        -1.6162, -0.8200], device='cuda:0')
+[rank0]:[W1111 14:32:44.251858063 ProcessGroupNCCL.cpp:1647] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+
+
+
+===ex2_2.py===
+root@jupyter-b9iy8xzcm6pcanmv:~/p2# torchrun --nproc_per_node=2 ex2_2.py
+W1111 15:11:23.459000 12760 site-packages/torch/distributed/run.py:862] 
+W1111 15:11:23.459000 12760 site-packages/torch/distributed/run.py:862] *****************************************
+W1111 15:11:23.459000 12760 site-packages/torch/distributed/run.py:862] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W1111 15:11:23.459000 12760 site-packages/torch/distributed/run.py:862] *****************************************
+Verified! Content:tensor([-0.7119,  0.1922, -0.2407, -0.5823,  0.5265,  0.7082, -0.6809,  1.6452,
+        -0.8254,  0.1110], device='cuda:0')
+
+
+
+===ex4.py===
+root@jupyter-b9iy8xzcm6pcanmv:~/p2# torchrun --nproc_per_node=2 ex4.py
+W1111 15:20:23.643000 14517 site-packages/torch/distributed/run.py:862] 
+W1111 15:20:23.643000 14517 site-packages/torch/distributed/run.py:862] *****************************************
+W1111 15:20:23.643000 14517 site-packages/torch/distributed/run.py:862] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W1111 15:20:23.643000 14517 site-packages/torch/distributed/run.py:862] *****************************************
+/opt/conda/lib/python3.12/site-packages/torch/distributed/c10d_logger.py:83: UserWarning: barrier(): using the device under current context. You can specify `device_id` in `init_process_group` to mute this warning.
+  return func(*args, **kwargs)
+[rank0]:[W1111 15:20:46.657742291 ProcessGroupNCCL.cpp:5324] Guessing device ID based on global rank. This can cause a hang if rank to GPU mapping is heterogeneous. You can specify device_id in init_process_group()
+[rank1]:[W1111 15:20:47.422808988 ProcessGroupNCCL.cpp:4215] Warning: An unbatched P2P op (send/recv) was called on this ProcessGroup with size 2.  In lazy initialization mode, this will result in a new 2-rank NCCL communicator to be created. (function operator())
+[rank0]:[W1111 15:20:47.423019317 ProcessGroupNCCL.cpp:4215] Warning: An unbatched P2P op (send/recv) was called on this ProcessGroup with size 2.  In lazy initialization mode, this will result in a new 2-rank NCCL communicator to be created. (function operator())
+[rank1]:[W1111 15:20:47.732917622 ProcessGroupNCCL.cpp:4215] Warning: An unbatched P2P op (send/recv) was called on this ProcessGroup with size 2.  In lazy initialization mode, this will result in a new 2-rank NCCL communicator to be created. (function operator())
+Data all Received!
+[rank0]:[W1111 15:20:47.748357587 ProcessGroupNCCL.cpp:4215] Warning: An unbatched P2P op (send/recv) was called on this ProcessGroup with size 2.  In lazy initialization mode, this will result in a new 2-rank NCCL communicator to be created. (function operator())
+Verified!: Rank0
+Verified!: Rank1
+Send/Recv:tensor([ 0.2762, -0.0893, -2.1888,  2.5575, -0.9327,  1.0899, -1.1726,  0.9958,
+         1.9435,  1.5605], device='cuda:0')
+All_Reduce:tensor([ 0.2762, -0.0893, -2.1888,  2.5575, -0.9327,  1.0899, -1.1726,  0.9958,
+         1.9435,  1.5605], device='cuda:0')
+Send/Recv:tensor([ 0.2762, -0.0893, -2.1888,  2.5575, -0.9327,  1.0899, -1.1726,  0.9958,
+         1.9435,  1.5605], device='cuda:1')
+All_Reduce:tensor([ 0.2762, -0.0893, -2.1888,  2.5575, -0.9327,  1.0899, -1.1726,  0.9958,
+         1.9435,  1.5605], device='cuda:1')
+Send/Recv  time:511.2650ms
+All_Reduce time:0.3557ms
+
+===ex5.py===
+root@jupyter-b9iy8xzcm6pcanmv:~/p2# torchrun --nproc_per_node=2 ex5.py
+W1111 15:40:31.509000 17152 site-packages/torch/distributed/run.py:862] 
+W1111 15:40:31.509000 17152 site-packages/torch/distributed/run.py:862] *****************************************
+W1111 15:40:31.509000 17152 site-packages/torch/distributed/run.py:862] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W1111 15:40:31.509000 17152 site-packages/torch/distributed/run.py:862] *****************************************
+/opt/conda/lib/python3.12/site-packages/torch/distributed/c10d_logger.py:83: UserWarning: barrier(): using the device under current context. You can specify `device_id` in `init_process_group` to mute this warning.
+  return func(*args, **kwargs)
+[rank0]:[W1111 15:40:39.194042006 ProcessGroupNCCL.cpp:5324] Guessing device ID based on global rank. This can cause a hang if rank to GPU mapping is heterogeneous. You can specify device_id in init_process_group()
+Verified!: Rank1
+Verified!: Rank0
+Reduce+Broadcast:tensor([ 1.9050, -1.5857,  1.0263,  1.5510,  2.1135, -1.2021,  0.2745, -3.5295,
+         1.2466, -0.2216], device='cuda:1')
+All_Reduce:tensor([ 1.9050, -1.5857,  1.0263,  1.5510,  2.1135, -1.2021,  0.2745, -3.5295,
+         1.2466, -0.2216], device='cuda:1')
+Reduce+Broadcast:tensor([ 1.9050, -1.5857,  1.0263,  1.5510,  2.1135, -1.2021,  0.2745, -3.5295,
+         1.2466, -0.2216], device='cuda:0')
+All_Reduce:tensor([ 1.9050, -1.5857,  1.0263,  1.5510,  2.1135, -1.2021,  0.2745, -3.5295,
+         1.2466, -0.2216], device='cuda:0')
+Reduce+Broadcast  time:1.6835ms
+All_Reduce        time:0.2406ms
+[rank0]:[W1111 15:40:50.308305473 ProcessGroupNCCL.cpp:1647] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())

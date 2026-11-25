@@ -1,0 +1,192 @@
+(base) root@22ad1cb9ab83:/Net/p3# torchrun --nproc_per_node=2 exp3_timing.py
+W1125 19:35:15.814000 144 site-packages/torch/distributed/run.py:774]
+W1125 19:35:15.814000 144 site-packages/torch/distributed/run.py:774] *****************************************
+W1125 19:35:15.814000 144 site-packages/torch/distributed/run.py:774] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed.
+W1125 19:35:15.814000 144 site-packages/torch/distributed/run.py:774] *****************************************
+No.0 all_reduce : 441.751ms
+No.1 all_reduce : 0.317ms
+No.2 all_reduce : 0.202ms
+No.3 all_reduce : 0.171ms
+No.4 all_reduce : 0.167ms
+No.5 all_reduce : 0.167ms
+
+(base) root@22ad1cb9ab83:/Net/p3# python3
+Python 3.13.5 | packaged by Anaconda, Inc. | (main, Jun 12 2025, 16:09:02) [GCC 11.2.0] on linux
+Type "help", "copyright", "credits" or "license" for more information.
+>>> import torch
+>>> print(torch.cuda.nccl.version())
+(2, 27, 3)
+
+
+collective 提供集合通信模板 
+collective(
+    check_gpu_tensors() //检查原料
+    auto comm getNCCLComm() //建组准备
+                            //stream准备
+    ncclStream.waitEvent()  //等待准备fn
+    fn(input, output, comm, ncclStream)  // 执行
+    计算流.waitEvent(通信进度)
+    return WorkNCCL() //返回工单
+)
+
+(base) root@22ad1cb9ab83:/Net/p3# torchrun --nproc_per_node=2 exp4_profiler.py
+W1125 19:54:30.357000 471 site-packages/torch/distributed/run.py:774]
+W1125 19:54:30.357000 471 site-packages/torch/distributed/run.py:774] *****************************************
+W1125 19:54:30.357000 471 site-packages/torch/distributed/run.py:774] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed.
+W1125 19:54:30.357000 471 site-packages/torch/distributed/run.py:774] *****************************************
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg    # of Calls
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------
+                                       c10d::allreduce_         3.66%      90.567us        93.89%       2.323ms       2.323ms       0.000us         0.00%     208.128us     208.128us             1
+                                     record_param_comms         7.37%     182.387us        90.23%       2.232ms       2.232ms     104.064us       100.00%     208.128us     208.128us             1
+                                Activity Buffer Request        79.67%       1.971ms        79.67%       1.971ms       1.971ms     104.064us       100.00%     104.064us     104.064us             1
+ncclDevKernel_AllReduce_Sum_f32_RING_LL(ncclDevKerne...         0.00%       0.000us         0.00%       0.000us       0.000us     104.064us       100.00%     104.064us     104.064us             1
+                                        nccl:all_reduce         0.00%       0.000us         0.00%       0.000us       0.000us     104.064us       100.00%     104.064us     104.064us             1
+                                  cudaStreamIsCapturing         0.44%      10.801us         0.44%      10.801us       5.400us       0.000us         0.00%       0.000us       0.000us             2
+                                        nccl:all_reduce         0.00%       0.000us             0     195.030us     195.030us       0.000us         0.00%       0.000us       0.000us             1
+                            cudaStreamGetCaptureInfo_v2         0.12%       2.935us         0.12%       2.935us       2.935us       0.000us         0.00%       0.000us       0.000us             1
+                                        cudaEventRecord         0.37%       9.207us         0.37%       9.207us       3.069us       0.000us         0.00%       0.000us       0.000us             3
+                                    cudaStreamWaitEvent         0.26%       6.372us         0.26%       6.372us       3.186us       0.000us         0.00%       0.000us       0.000us             2
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------
+Self CPU time total: 2.474ms
+Self CUDA time total: 104.064us
+
+c10d::allreduce_                                    子调用
+record_param_comms                                  c10d 内部封装通信的逻辑层，往下调用 NCCL。
+Activity Buffer Request                             NCCL/c10d 内部申请、管理通信 buffer（活动缓冲区），内存分配/缓存管理，CPU 侧最耗时
+ncclDevKernel_AllReduce_Sum_f32_RING_L              NCCL 底层 GPU kernel：RING拓扑/FP32/Sum规约
+cudaStreamIsCapturing / cudaEventRecord / cudaStreamWaitEvent  CUDA Runtime API
+    cudaStreamIsCapturing                           CUDA Graph抓取优先
+    cudaEventRecord                                 往流的任务队列里插入一个Event
+    cudaStreamWaitEvent                             这个 stream，必须等 event 标记的工作全部跑完，才继续跑后面的任务
+
+
+(base) root@22ad1cb9ab83:/Net/p2# NCCL_DEBUG=INFO NCCL_DEBUG_SUBSYS=INIT,GRAPH,P2P \
+> torchrun --nproc_per_node=2 exp0_hello.py  2&>1 | grep -E "Ring|via|comm" | head -10
+(base) root@22ad1cb9ab83:/Net/p2# NCCL_DEBUG=INFO NCCL_DEBUG_SUBSYS=INIT,GRAPH,P2P torchrun --nproc_per_node=2 exp0_hello.py  2>&1 | grep -E "Ring|via|comm" | head -10
+22ad1cb9ab83:557:570 [1] NCCL INFO Assigned NET plugin Socket to comm
+22ad1cb9ab83:556:569 [0] NCCL INFO Assigned NET plugin Socket to comm
+22ad1cb9ab83:557:570 [1] NCCL INFO ncclCommInitRankConfig comm 0x18dba7c0 rank 1 nranks 2 cudaDev 1 nvmlDev 1 busId 98000 commId 0x456a667bc805aae8 - Init START
+22ad1cb9ab83:556:569 [0] NCCL INFO ncclCommInitRankConfig comm 0x2d52c440 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId 92000 commId 0x456a667bc805aae8 - Init START
+22ad1cb9ab83:556:569 [0] NCCL INFO comm 0x2d52c440 rank 0 nRanks 2 nNodes 1 localRanks 2 localRank 0 MNNVL 0
+22ad1cb9ab83:557:570 [1] NCCL INFO comm 0x18dba7c0 rank 1 nRanks 2 nNodes 1 localRanks 2 localRank 1 MNNVL 0
+22ad1cb9ab83:557:570 [1] NCCL INFO Ring 00 : 0 -> 1 -> 0
+22ad1cb9ab83:557:570 [1] NCCL INFO Ring 01 : 0 -> 1 -> 0
+22ad1cb9ab83:557:570 [1] NCCL INFO Ring 02 : 0 -> 1 -> 0
+22ad1cb9ab83:557:570 [1] NCCL INFO Ring 03 : 0 -> 1 -> 0
+...
+22ad1cb9ab83:640:653 [0] NCCL INFO ncclCommInitRankConfig comm 0x23833d60 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId 92000 commId 0xe054e2a330cdc0b6 - Init COMPLETE
+22ad1cb9ab83:641:654 [1] NCCL INFO ncclCommInitRankConfig comm 0x25259bb0 rank 1 nranks 2 cudaDev 1 nvmlDev 1 busId 98000 commId 0xe054e2a330cdc0b6 - Init COMPLETE
+22ad1cb9ab83:640:661 [0] NCCL INFO Channel 00/0 : 0[0] -> 1[1] via P2P/CUMEM/read
+22ad1cb9ab83:641:662 [1] NCCL INFO Channel 00/0 : 1[1] -> 0[0] via P2P/CUMEM/read
+22ad1cb9ab83:640:661 [0] NCCL INFO Channel 01/0 : 0[0] -> 1[1] via P2P/CUMEM/read
+22ad1cb9ab83:641:662 [1] NCCL INFO Channel 01/0 : 1[1] -> 0[0] via P2P/CUMEM/read
+22ad1cb9ab83:640:661 [0] NCCL INFO Channel 02/0 : 0[0] -> 1[1] via P2P/CUMEM/read
+22ad1cb9ab83:641:662 [1] NCCL INFO Channel 02/0 : 1[1] -> 0[0] via P2P/CUMEM/read
+22ad1cb9ab83:640:661 [0] NCCL INFO Channel 03/0 : 0[0] -> 1[1] via P2P/CUMEM/read
+22ad1cb9ab83:641:662 [1] NCCL INFO Channel 03/0 : 1[1] -> 0[0] via P2P/CUMEM/read
+22ad1cb9ab83:640:661 [0] NCCL INFO Channel 04/0 : 0[0] -> 1[1] via P2P/CUMEM/read
+...
+
+22ad1cb9ab83:640:661 [0] NCCL INFO Channel 04/0 : 0[0] -> 1[1] via P2P/CUMEM/read       P2P/CUMEM 显存直写  同进程实现协作
+22ad1cb9ab83:557:570 [1] NCCL INFO Assigned NET plugin Socket to comm
+22ad1cb9ab83:556:569 [0] NCCL INFO Assigned NET plugin Socket to comm                   创建单机2卡的 NCCL通信器comm；
+                                                                                        全局共 2 rank，全部在同一台机器上；
+                                                                                        跨节点传输插件被配置为 Socket (TCP)
+
+
+
+
+================== Exercise ================
+(base) root@22ad1cb9ab83:/Net/p3# torchrun --nproc_per_node=2 ex1_1.py
+W1125 20:42:08.218000 299 site-packages/torch/distributed/run.py:774]
+W1125 20:42:08.218000 299 site-packages/torch/distributed/run.py:774] *****************************************
+W1125 20:42:08.218000 299 site-packages/torch/distributed/run.py:774] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed.
+W1125 20:42:08.218000 299 site-packages/torch/distributed/run.py:774] *****************************************
+第0次 all_reduce: 432.492ms
+第1次 all_reduce: 0.218ms
+第2次 all_reduce: 0.171ms
+第3次 all_reduce: 0.145ms
+第4次 all_reduce: 0.143ms
+第5次 all_reduce: 0.140ms
+
+(base) root@22ad1cb9ab83:/Net/p3# torchrun --nproc_per_node=2 ex1_2.py
+W1125 20:43:12.568000 379 site-packages/torch/distributed/run.py:774]
+W1125 20:43:12.568000 379 site-packages/torch/distributed/run.py:774] *****************************************
+W1125 20:43:12.568000 379 site-packages/torch/distributed/run.py:774] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed.
+W1125 20:43:12.568000 379 site-packages/torch/distributed/run.py:774] *****************************************
+第0次 all_reduce: 425.642ms
+第1次 all_reduce: 2.811ms
+第2次 all_reduce: 2.724ms
+第3次 all_reduce: 2.497ms
+第4次 all_reduce: 2.484ms
+第5次 all_reduce: 2.487ms
+=>>建组成本大小和消息大小无关
+
+(base) root@22ad1cb9ab83:/Net/p3# torchrun --nproc_per_node=2 ex2_1.py
+W1125 20:51:11.767000 666 site-packages/torch/distributed/run.py:774]
+W1125 20:51:11.767000 666 site-packages/torch/distributed/run.py:774] *****************************************
+W1125 20:51:11.767000 666 site-packages/torch/distributed/run.py:774] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed.
+W1125 20:51:11.767000 666 site-packages/torch/distributed/run.py:774] *****************************************
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg    # of Calls
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------
+                                       c10d::allreduce_         0.53%      91.839us        12.06%       2.070ms       2.070ms       0.000us         0.00%      30.527ms      30.527ms             1
+                                     record_param_comms         1.04%     178.055us        11.53%       1.979ms       1.979ms      15.263ms       100.00%      30.527ms      30.527ms             1
+                                Activity Buffer Request        10.03%       1.722ms        10.03%       1.722ms       1.722ms      15.263ms       100.00%      15.263ms      15.263ms             1
+ncclDevKernel_AllReduce_Sum_f32_RING_LL(ncclDevKerne...         0.00%       0.000us         0.00%       0.000us       0.000us      15.263ms       100.00%      15.263ms      15.263ms             1
+                                        nccl:all_reduce         0.00%       0.000us         0.00%       0.000us       0.000us      15.263ms       100.00%      15.263ms      15.263ms             1
+                                  cudaStreamIsCapturing         0.06%      10.752us         0.06%      10.752us       5.376us       0.000us         0.00%       0.000us       0.000us             2
+                                        nccl:all_reduce         0.00%       0.000us             0     190.460us     190.460us       0.000us         0.00%       0.000us       0.000us             1
+                            cudaStreamGetCaptureInfo_v2         0.02%       2.605us         0.02%       2.605us       2.605us       0.000us         0.00%       0.000us       0.000us             1
+                                        cudaEventRecord         0.05%       8.235us         0.05%       8.235us       2.745us       0.000us         0.00%       0.000us       0.000us             3
+                                    cudaStreamWaitEvent         0.04%       6.132us         0.04%       6.132us       3.066us       0.000us         0.00%       0.000us       0.000us             2
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------
+Self CPU time total: 17.167ms
+Self CUDA time total: 15.263ms
+
+(base) root@22ad1cb9ab83:/Net/p3# torchrun --nproc_per_node=2 ex2_2.py
+W1125 20:51:45.970000 714 site-packages/torch/distributed/run.py:774]
+W1125 20:51:45.970000 714 site-packages/torch/distributed/run.py:774] *****************************************
+W1125 20:51:45.970000 714 site-packages/torch/distributed/run.py:774] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed.
+W1125 20:51:45.970000 714 site-packages/torch/distributed/run.py:774] *****************************************
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg    # of Calls
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------
+                                       c10d::allreduce_         2.53%      88.982us        58.86%       2.072ms       2.072ms       0.000us         0.00%       3.219ms       3.219ms             1
+                                     record_param_comms         5.01%     176.204us        56.33%       1.983ms       1.983ms       1.609ms       100.00%       3.219ms       3.219ms             1
+                                Activity Buffer Request        49.06%       1.727ms        49.06%       1.727ms       1.727ms       1.609ms       100.00%       1.609ms       1.609ms             1
+ncclDevKernel_AllReduce_Sum_f32_RING_LL(ncclDevKerne...         0.00%       0.000us         0.00%       0.000us       0.000us       1.609ms       100.00%       1.609ms       1.609ms             1
+                                        nccl:all_reduce         0.00%       0.000us         0.00%       0.000us       0.000us       1.609ms       100.00%       1.609ms       1.609ms             1
+                                  cudaStreamIsCapturing         0.30%      10.500us         0.30%      10.500us       5.250us       0.000us         0.00%       0.000us       0.000us             2
+                                        nccl:all_reduce         0.00%       0.000us             0     192.173us     192.173us       0.000us         0.00%       0.000us       0.000us             1
+                            cudaStreamGetCaptureInfo_v2         0.08%       2.755us         0.08%       2.755us       2.755us       0.000us         0.00%       0.000us       0.000us             1
+                                        cudaEventRecord         0.25%       8.726us         0.25%       8.726us       2.909us       0.000us         0.00%       0.000us       0.000us             3
+                                    cudaStreamWaitEvent         0.19%       6.673us         0.19%       6.673us       3.336us       0.000us         0.00%       0.000us       0.000us             2
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------
+Self CPU time total: 3.520ms
+Self CUDA time total: 1.609ms
+
+(base) root@22ad1cb9ab83:/Net/p3# torchrun --nproc_per_node=2 ex2_3.py
+W1125 20:53:10.742000 808 site-packages/torch/distributed/run.py:774]
+W1125 20:53:10.742000 808 site-packages/torch/distributed/run.py:774] *****************************************
+W1125 20:53:10.742000 808 site-packages/torch/distributed/run.py:774] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed.
+W1125 20:53:10.742000 808 site-packages/torch/distributed/run.py:774] *****************************************
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg    # of Calls
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------
+                                       c10d::allreduce_         1.11%      89.403us        25.71%       2.073ms       2.073ms       0.000us         0.00%      12.325ms      12.325ms             1
+                                     record_param_comms         2.22%     178.857us        24.60%       1.983ms       1.983ms       6.163ms       100.00%      12.325ms      12.325ms             1
+                                Activity Buffer Request        21.42%       1.727ms        21.42%       1.727ms       1.727ms       6.163ms       100.00%       6.163ms       6.163ms             1
+ncclDevKernel_AllReduce_Sum_f32_RING_LL(ncclDevKerne...         0.00%       0.000us         0.00%       0.000us       0.000us       6.163ms       100.00%       6.163ms       6.163ms             1
+                                        nccl:all_reduce         0.00%       0.000us         0.00%       0.000us       0.000us       6.163ms       100.00%       6.163ms       6.163ms             1
+                                  cudaStreamIsCapturing         0.13%      10.570us         0.13%      10.570us       5.285us       0.000us         0.00%       0.000us       0.000us             2
+                                        nccl:all_reduce         0.00%       0.000us             0     191.743us     191.743us       0.000us         0.00%       0.000us       0.000us             1
+                            cudaStreamGetCaptureInfo_v2         0.03%       2.485us         0.03%       2.485us       2.485us       0.000us         0.00%       0.000us       0.000us             1
+                                        cudaEventRecord         0.11%       8.978us         0.11%       8.978us       2.993us       0.000us         0.00%       0.000us       0.000us             3
+                                    cudaStreamWaitEvent         0.08%       6.202us         0.08%       6.202us       3.101us       0.000us         0.00%       0.000us       0.000us             2
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------
+Self CPU time total: 8.063ms
+Self CUDA time total: 6.163ms
+
+LL/LL128/Simple 分别适用于小中大消息 本次实验环境有一定问题  所有消息大小都是用LL
