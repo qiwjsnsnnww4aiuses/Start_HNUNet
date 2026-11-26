@@ -1,0 +1,8 @@
+# apt install -y perftest ibverbs-utils
+ibv_devices
+
+# 0 server
+ib_write_bw -d mlx5_0 -F --report_gbits
+
+# 1 client
+ib_write_bw -d mlx5_0 -F --report_gbits
